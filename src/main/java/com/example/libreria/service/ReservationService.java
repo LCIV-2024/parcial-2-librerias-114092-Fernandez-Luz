@@ -49,7 +49,7 @@ public class ReservationService {
         reservation.setBook(book);
         reservation.setRentalDays(requestDTO.getRentalDays());
         reservation.setStartDate(requestDTO.getStartDate());
-        // expectedReturnDate se setea en @PrePersist si no está, pero lo ponemos explícito también:
+
         reservation.setExpectedReturnDate(requestDTO.getStartDate().plusDays(requestDTO.getRentalDays()));
 
 
@@ -82,7 +82,7 @@ public class ReservationService {
     @Transactional
     public ReservationResponseDTO returnBook(Long reservationId, ReturnBookRequestDTO returnRequest) {
 
-        // TODO: Implementar la devolución de un libro
+        //ok TODO: Implementar la devolución de un libro
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new RuntimeException("Reserva no encontrada con ID: " + reservationId));
         

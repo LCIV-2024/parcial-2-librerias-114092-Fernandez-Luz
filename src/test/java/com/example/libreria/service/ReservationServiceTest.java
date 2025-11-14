@@ -16,8 +16,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -78,21 +80,128 @@ class ReservationServiceTest {
     
     @Test
     void testCreateReservation_Success() {
-        // TODO: Implementar el test de creación de reserva exitosa
+        ReservationRequestDTO request = new ReservationRequestDTO();
+        request.setUserId(1L);
+        request.setBookExternalId(258027L);
+        request.setRentalDays(7);
+        request.setStartDate(LocalDate.now());
+
+        when(userService.getUserEntity(1L)).thenReturn(testUser);
+
+        when(bookRepository.findByExternalId(258027L))
+                .thenReturn(Optional.of(testBook));
+
+        when(reservationRepository.save(any(Reservation.class)))
+                .thenAnswer(invocation -> {
+                    Reservation r = invocation.getArgument(0);
+                    r.setId(1L);
+                    return r;
+                });
+
+        ReservationResponseDTO result = reservationService.createReservation(request);
+
+        assertNotNull(result);
+        assertEquals(1L, result.getId());
+        assertEquals(testUser.getId(), result.getUserId());
+        assertEquals(testBook.getExternalId(), result.getBookExternalId());
+
+        verify(bookService).decreaseAvailableQuantity(testBook.getExternalId());
+        verify(reservationRepository).save(any(Reservation.class));
+        // TODOok: Implementar el test de creación de reserva exitosa
     }
     
     @Test
     void testCreateReservation_BookNotAvailable() {
-        // TODO: Implementar el test de creación de reserva cuando el libro no está disponible
+        ReservationRequestDTO request = new ReservationRequestDTO();
+        request.setUserId(1L);
+        request.setBookExternalId(258027L);
+        request.setRentalDays(7);
+
+        when(userService.getUserEntity(1L)).thenReturn(testUser);
+
+        testBook.setAvailableQuantity(0);
+        testBook.setTitle("The Lord of the Rings");
+
+        when(bookRepository.findByExternalId(258027L))
+                .thenReturn(Optional.of(testBook));
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+                reservationService.createReservation(request));
+
+        assertEquals(
+                "No hay unidades disponibles para reservar del libro: The Lord of the Rings",
+                ex.getMessage()
+        );
+
+        verify(reservationRepository, never()).save(any());
+        verify(bookService, never()).decreaseAvailableQuantity(anyLong());
+        // TODOok: Implementar el test de creación de reserva cuando el libro no está disponible
     }
     
     @Test
     void testReturnBook_OnTime() {
-        // TODO: Implementar el test de devolución de libro en tiempo
+
+        LocalDate today = LocalDate.now();
+        testReservation.setExpectedReturnDate(today);
+        testReservation.setActualReturnDate(null);
+
+        ReturnBookRequestDTO request = new ReturnBookRequestDTO();
+        request.setReturnDate(today);
+
+        when(reservationRepository.findById(1L))
+                .thenReturn(Optional.of(testReservation));
+
+        when(reservationRepository.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ReservationResponseDTO result = reservationService.returnBook(1L, request);
+
+        assertNotNull(result);
+        assertEquals(Reservation.ReservationStatus.RETURNED, result.getStatus());
+        assertEquals(BigDecimal.ZERO, result.getLateFee());
+
+        verify(bookService, times(1)).increaseAvailableQuantity(testBook.getExternalId());
+        verify(reservationRepository, times(1)).save(any(Reservation.class));
+        // TODOok: Implementar el test de devolución de libro en tiempo
     }
     
     @Test
     void testReturnBook_Overdue() {
+
+
+        LocalDate expectedReturn = LocalDate.now().minusDays(3);
+        LocalDate actualReturn = LocalDate.now();
+
+        testReservation.setExpectedReturnDate(expectedReturn);
+        testReservation.setActualReturnDate(null);
+
+        ReturnBookRequestDTO request = new ReturnBookRequestDTO();
+        request.setReturnDate(actualReturn);
+
+        when(reservationRepository.findById(1L))
+                .thenReturn(Optional.of(testReservation));
+
+        when(reservationRepository.save(any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ReservationResponseDTO result = reservationService.returnBook(1L, request);
+
+        assertNotNull(result);
+        assertEquals(Reservation.ReservationStatus.RETURNED, result.getStatus());
+
+        long daysLate = ChronoUnit.DAYS.between(expectedReturn, actualReturn);
+
+        BigDecimal expectedLateFee = testReservation.getBook()
+                .getPrice()
+                .multiply(BigDecimal.valueOf(daysLate))
+                .multiply(BigDecimal.valueOf(0.10))   // 10% POR DÍA
+                .setScale(2, RoundingMode.HALF_UP);
+
+        assertEquals(expectedLateFee, result.getLateFee());
+
+        verify(reservationRepository, times(1)).save(any(Reservation.class));
+
+        verify(bookService, times(1)).increaseAvailableQuantity(testBook.getExternalId());
         // TODO: Implementar el test de devolución de libro con retraso
     }
     
