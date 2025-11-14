@@ -34,6 +34,40 @@ public class ReservationService {
     @Transactional
     public ReservationResponseDTO createReservation(ReservationRequestDTO requestDTO) {
 
+        User user = userService.getUserEntity(requestDTO.getUserId());
+
+        Book book = bookRepository.findByExternalId(requestDTO.getBookExternalId())
+                .orElseThrow(() -> new RuntimeException("Libro no encontrado con ID externo: " + requestDTO.getBookExternalId()));
+
+        if (book.getAvailableQuantity() == null || book.getAvailableQuantity() <= 0) {
+            throw new RuntimeException("No hay unidades disponibles para reservar del libro: " + book.getTitle());
+        }
+
+        Reservation reservation = new Reservation();
+        reservation.setUser(user);
+        reservation.setBook(book);
+        reservation.setRentalDays(requestDTO.getRentalDays());
+        reservation.setStartDate(requestDTO.getStartDate());
+        // expectedReturnDate se setea en @PrePersist si no está, pero lo ponemos explícito también:
+        reservation.setExpectedReturnDate(requestDTO.getStartDate().plusDays(requestDTO.getRentalDays()));
+
+
+        reservation.setDailyRate(book.getPrice());
+
+        BigDecimal totalFee = calculateTotalFee(reservation.getDailyRate(), reservation.getRentalDays());
+        reservation.setTotalFee(totalFee);
+
+        reservation.setStatus(Reservation.ReservationStatus.ACTIVE);
+
+        Reservation saved = reservationRepository.save(reservation);
+
+        
+        bookService.decreaseAvailableQuantity(book.getExternalId());
+
+        log.info("Reserva creada id={} user={} book={} start={} days={}",
+                saved.getId(), user.getId(), book.getExternalId(), reservation.getStartDate(), reservation.getRentalDays());
+
+        return convertToDTO(saved);
         // TODO: Implementar la creación de una reserva
         // Validar que el usuario existe
         
