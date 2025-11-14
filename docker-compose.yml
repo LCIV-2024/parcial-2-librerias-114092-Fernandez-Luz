@@ -1,1 +1,11 @@
-# // TODO: Implementar el docker-compose
+# // TODOok: Implementar el docker-compose
+version: "3.8"
+
+services:
+  libreria:
+    build: .
+    container_name: libreria-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
