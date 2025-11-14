@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -61,7 +62,7 @@ public class ReservationService {
 
         Reservation saved = reservationRepository.save(reservation);
 
-        
+
         bookService.decreaseAvailableQuantity(book.getExternalId());
 
         log.info("Reserva creada id={} user={} book={} start={} days={}",
@@ -91,6 +92,34 @@ public class ReservationService {
         
         LocalDate returnDate = returnRequest.getReturnDate();
         reservation.setActualReturnDate(returnDate);
+
+        LocalDate expectedReturn = reservation.getExpectedReturnDate();
+        long daysLate = 0;
+        if (returnDate.isAfter(expectedReturn)) {
+            daysLate = ChronoUnit.DAYS.between(expectedReturn, returnDate);
+        }
+
+        BigDecimal lateFee = BigDecimal.ZERO;
+        if (daysLate > 0) {
+            lateFee = calculateLateFee(reservation.getBook().getPrice(), daysLate);
+            reservation.setStatus(Reservation.ReservationStatus.RETURNED);
+        } else {
+            reservation.setStatus(Reservation.ReservationStatus.RETURNED);
+        }
+
+
+        reservation.setLateFee(lateFee);
+        BigDecimal base = calculateTotalFee(reservation.getDailyRate(), reservation.getRentalDays());
+        reservation.setTotalFee(base.add(lateFee));
+
+        Reservation saved = reservationRepository.save(reservation);
+
+
+        bookService.increaseAvailableQuantity(reservation.getBook().getExternalId());
+
+        log.info("Reserva devuelta id={} returnDate={} daysLate={} lateFee={}", saved.getId(), returnDate, daysLate, lateFee);
+
+        return convertToDTO(saved);
         
         // Calcular tarifa por demora si hay retraso
 
@@ -135,10 +164,22 @@ public class ReservationService {
     }
     
     private BigDecimal calculateTotalFee(BigDecimal dailyRate, Integer rentalDays) {
+        if (dailyRate == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal days = BigDecimal.valueOf(rentalDays != null ? rentalDays : 0);
+        return dailyRate.multiply(days).setScale(2, RoundingMode.HALF_UP);
         // TODO: Implementar el cálculo del total de la reserva
     }
     
     private BigDecimal calculateLateFee(BigDecimal bookPrice, long daysLate) {
+
+        if (bookPrice == null || daysLate <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal days = BigDecimal.valueOf(daysLate);
+        BigDecimal fee = bookPrice.multiply(LATE_FEE_PERCENTAGE).multiply(days);
+        return fee.setScale(2, RoundingMode.HALF_UP);
         // 15% del precio del libro por cada día de demora
         // TODO: Implementar el cálculo de la multa por demora
     }
