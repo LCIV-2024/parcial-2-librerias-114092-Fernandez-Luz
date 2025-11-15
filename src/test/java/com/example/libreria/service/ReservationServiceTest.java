@@ -194,7 +194,7 @@ class ReservationServiceTest {
         BigDecimal expectedLateFee = testReservation.getBook()
                 .getPrice()
                 .multiply(BigDecimal.valueOf(daysLate))
-                .multiply(BigDecimal.valueOf(0.10))   // 10% POR DÍA
+                .multiply(BigDecimal.valueOf(0.15))   // 15% POR DÍA
                 .setScale(2, RoundingMode.HALF_UP);
 
         assertEquals(expectedLateFee, result.getLateFee());
